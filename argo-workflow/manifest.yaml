@@ -1,0 +1,145 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: mise-en-prod-workflow-
+  namespace: user-cdestouesse
+spec:
+  entrypoint: main
+  serviceAccountName: workflow
+
+  arguments:
+    parameters:
+      # The MLflow tracking server is responsible to log the hyper-parameter and model metrics.
+      - name: mlflow-tracking-uri
+        value: "https://user-cdestouesse-mlflow.user.lab.sspcloud.fr/"
+      - name: mlflow-experiment-name
+        value: "mise-en-prod"
+      - name: model-training-conf-list
+        value: |
+          [
+            {
+              "data_path": "s3://projet-ensae/mise-en-prod/dataset_final.parquet",
+              "models_dir": "models",
+              "experiment_name": "mise-en-prod",
+              "use_grid_search": "false",
+              "logreg_c_values": "0.1,1.0,10.0",
+              "logreg_max_iter_values": "500,1000",
+              "adaboost_n_estimators_values": "10,50",
+              "adaboost_learning_rate_values": "0.05,0.1,0.2",
+              "adaboost_tree_depth_values": "3,4",
+              "xgb_n_estimators_values": "100,200",
+              "xgb_learning_rate_values": "0.05,0.1",
+              "xgb_max_depth_values": "4,6,8"
+            }
+          ]
+
+  templates:
+    # Entrypoint DAG template
+    - name: main
+      dag:
+        tasks:
+          # Task 0: Start pipeline
+          - name: start-pipeline
+            template: start-pipeline-wt
+
+          # Task 1: Train model with given params
+          - name: train-model-with-params
+            dependencies: [start-pipeline]
+            template: run-model-training-wt
+            arguments:
+              parameters:
+                - name: data_path
+                  value: "{{item.data_path}}"
+                - name: models_dir
+                  value: "{{item.models_dir}}"
+                - name: experiment_name
+                  value: "{{item.experiment_name}}"
+                - name: use_grid_search
+                  value: "{{item.use_grid_search}}"
+                - name: logreg_c_values
+                  value: "{{item.logreg_c_values}}"
+                - name: logreg_max_iter_values
+                  value: "{{item.logreg_max_iter_values}}"
+                - name: adaboost_n_estimators_values
+                  value: "{{item.adaboost_n_estimators_values}}"
+                - name: adaboost_learning_rate_values
+                  value: "{{item.adaboost_learning_rate_values}}"
+                - name: adaboost_tree_depth_values
+                  value: "{{item.adaboost_tree_depth_values}}"
+                - name: xgb_n_estimators_values
+                  value: "{{item.xgb_n_estimators_values}}"
+                - name: xgb_learning_rate_values
+                  value: "{{item.xgb_learning_rate_values}}"
+                - name: xgb_max_depth_values
+                  value: "{{item.xgb_max_depth_values}}"
+            # Pass the inputs to the task using "withParam"
+            withParam: "{{workflow.parameters.model-training-conf-list}}"
+
+    # Worker template for task 0 : start-pipeline
+    - name: start-pipeline-wt
+      container:
+        image: busybox
+        command: ["sh", "-c"]
+        args: ["echo Starting pipeline"]
+
+    # Worker template for task 1 : train model with params
+    - name: run-model-training-wt
+      inputs:
+        parameters:
+          - name: data_path
+          - name: models_dir
+          - name: experiment_name
+          - name: use_grid_search
+          - name: logreg_c_values
+          - name: logreg_max_iter_values
+          - name: adaboost_n_estimators_values
+          - name: adaboost_learning_rate_values
+          - name: adaboost_tree_depth_values
+          - name: xgb_n_estimators_values
+          - name: xgb_learning_rate_values
+          - name: xgb_max_depth_values
+      container:
+        image: thomasroussaux/app-mise-en-prod:v0.0.1
+        imagePullPolicy: Always
+        command: ["sh", "-c"]
+        args:
+          - >-
+            GRID_SEARCH_FLAG="";
+            if [ "{{inputs.parameters.use_grid_search}}" = "true" ]; then GRID_SEARCH_FLAG="--use_grid_search"; fi;
+            uv run src/train.py
+            --data_path="{{inputs.parameters.data_path}}"
+            --models_dir="{{inputs.parameters.models_dir}}"
+            --experiment_name="{{inputs.parameters.experiment_name}}"
+            --logreg_c_values="{{inputs.parameters.logreg_c_values}}"
+            --logreg_max_iter_values="{{inputs.parameters.logreg_max_iter_values}}"
+            --adaboost_n_estimators_values="{{inputs.parameters.adaboost_n_estimators_values}}"
+            --adaboost_learning_rate_values="{{inputs.parameters.adaboost_learning_rate_values}}"
+            --adaboost_tree_depth_values="{{inputs.parameters.adaboost_tree_depth_values}}"
+            --xgb_n_estimators_values="{{inputs.parameters.xgb_n_estimators_values}}"
+            --xgb_learning_rate_values="{{inputs.parameters.xgb_learning_rate_values}}"
+            --xgb_max_depth_values="{{inputs.parameters.xgb_max_depth_values}}"
+            ${GRID_SEARCH_FLAG}
+        env:
+          - name: MLFLOW_TRACKING_URI
+            value: "{{workflow.parameters.mlflow-tracking-uri}}"
+          - name: MLFLOW_EXPERIMENT_NAME
+            value: "{{workflow.parameters.mlflow-experiment-name}}"
+          - name: MLFLOW_TRACKING_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: mlflow-secrets
+                key: MLFLOW_TRACKING_USERNAME
+          - name: MLFLOW_TRACKING_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: mlflow-secrets
+                key: MLFLOW_TRACKING_PASSWORD
+          - name: AWS_DEFAULT_REGION
+            value: "us-east-1"
+          - name: AWS_S3_ENDPOINT
+            value: "minio.lab.sspcloud.fr"
+          - name: JETON_API
+            valueFrom:
+              secretKeyRef:
+                name: api-jeton
+                key: JETON_API
