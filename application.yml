@@ -6,7 +6,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/felixdechamps/mise-en-prod-3A.git
-    targetRevision: main
+    targetRevision: mlflow
     path: deployment
   destination:
     server: https://kubernetes.default.svc
