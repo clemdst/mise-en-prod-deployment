@@ -25,6 +25,3 @@ spec:
             secretKeyRef:
               name: api-jeton
               key: JETON_API
-        envFrom:
-        - secretRef:
-            name: s3-credentials
