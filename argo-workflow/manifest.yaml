@@ -99,7 +99,7 @@ spec:
           - name: xgb_learning_rate_values
           - name: xgb_max_depth_values
       container:
-        image: thomasroussaux/app-mise-en-prod:v0.0.1
+        image: thomasroussaux/app-mise-en-prod:main
         imagePullPolicy: Always
         command: ["sh", "-c"]
         args:
