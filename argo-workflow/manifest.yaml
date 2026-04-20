@@ -18,7 +18,7 @@ spec:
         value: |
           [
             {
-              "data_path": "s3://projet-ensae/mise-en-prod/dataset_final.parquet",
+              "data_path": "s3://tchen/mise-en-prod/dataset_final.parquet",
               "models_dir": "models",
               "experiment_name": "mise-en-prod",
               "use_grid_search": "false",
