@@ -1,0 +1,65 @@
+name: Mise en prod model training
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  start-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Pipeline
+        run: echo "Starting pipeline"
+
+  train-model:
+    needs: start-pipeline
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - model-config:
+              data_path: s3://projet-ensae/mise-en-prod/dataset_final.parquet
+              models_dir: models
+              experiment_name: mise-en-prod
+              use_grid_search: false
+              logreg_c_values: "0.1,1.0,10.0"
+              logreg_max_iter_values: "500,1000"
+              adaboost_n_estimators_values: "10,50"
+              adaboost_learning_rate_values: "0.05,0.1,0.2"
+              adaboost_tree_depth_values: "3,4"
+              xgb_n_estimators_values: "100,200"
+              xgb_learning_rate_values: "0.05,0.1"
+              xgb_max_depth_values: "4,6,8"
+    container:
+      image: thomasroussaux/app-mise-en-prod:v0.0.1
+    env:
+      MLFLOW_TRACKING_URI: "${{ secrets.MLFLOW_TRACKING_URI }}"
+      MLFLOW_TRACKING_USERNAME: "${{ secrets.MLFLOW_TRACKING_USERNAME }}"
+      MLFLOW_TRACKING_PASSWORD: "${{ secrets.MLFLOW_TRACKING_PASSWORD }}"
+      MLFLOW_EXPERIMENT_NAME: "mise-en-prod"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+            repository: felixdechamps/mise-en-prod-3A
+
+      - name: Train Model
+        run: |
+          GRID_SEARCH_FLAG=""
+          if [ "${{ matrix.model-config.use_grid_search }}" = "true" ]; then GRID_SEARCH_FLAG="--use_grid_search"; fi
+          uv run src/train.py \
+            --data_path="${{ matrix.model-config.data_path }}" \
+            --models_dir="${{ matrix.model-config.models_dir }}" \
+            --experiment_name="${{ matrix.model-config.experiment_name }}" \
+            --logreg_c_values="${{ matrix.model-config.logreg_c_values }}" \
+            --logreg_max_iter_values="${{ matrix.model-config.logreg_max_iter_values }}" \
+            --adaboost_n_estimators_values="${{ matrix.model-config.adaboost_n_estimators_values }}" \
+            --adaboost_learning_rate_values="${{ matrix.model-config.adaboost_learning_rate_values }}" \
+            --adaboost_tree_depth_values="${{ matrix.model-config.adaboost_tree_depth_values }}" \
+            --xgb_n_estimators_values="${{ matrix.model-config.xgb_n_estimators_values }}" \
+            --xgb_learning_rate_values="${{ matrix.model-config.xgb_learning_rate_values }}" \
+            --xgb_max_depth_values="${{ matrix.model-config.xgb_max_depth_values }}" \
+            ${GRID_SEARCH_FLAG}
